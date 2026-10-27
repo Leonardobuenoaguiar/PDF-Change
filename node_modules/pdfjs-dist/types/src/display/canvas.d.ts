@@ -17,9 +17,12 @@ export class CanvasGraphics {
     baseTransformStack: any[];
     groupLevel: number;
     smaskStack: any[];
-    smaskCounter: number;
     tempSMask: any;
     smaskGroupCanvases: any[];
+    smaskPreparedEntry: any;
+    smaskPreparedFor: any;
+    smaskPreparedOffsetX: number;
+    smaskPreparedOffsetY: number;
     suspendedCtx: any;
     contentVisible: boolean;
     markedContentStack: never[];
@@ -73,22 +76,33 @@ export class CanvasGraphics {
     setFlatness(opIdx: any, flatness: any): void;
     setGState(opIdx: any, states: any): void;
     get inSMaskMode(): boolean;
-    checkSMaskState(): void;
+    _clearPreparedSMask(): void;
+    _ensurePreparedSMask(smask: any, width: any, height: any): void;
+    checkSMaskState(opIdx: any): void;
     /**
-     * Soft mask mode takes the current main drawing canvas and replaces it with
-     * a temporary canvas. Any drawing operations that happen on the temporary
-     * canvas need to be composed with the main canvas that was suspended (see
-     * `compose()`). The temporary canvas also duplicates many of its operations
-     * on the suspended canvas to keep them in sync, so that when the soft mask
-     * mode ends any clipping paths or transformations will still be active and in
-     * the right order on the canvas' graphics state stack.
+     * Backdrop cases use a layer-sized canvas so that the backdrop color
+     * correctly extends to pixels outside the mask canvas bounds.
+     * Filter-only cases use a mask-sized canvas to avoid a large allocation when
+     * the mask is small relative to the page; `composeSMask` then uses
+     * `smaskPreparedOffsetX/Y` to translate dirty-box coordinates into the
+     * smaller canvas's coordinate space. Plain-alpha masks with no backdrop or
+     * transfer map need no canvas at all.
+     */
+    _prepareSMaskCanvas(smask: any, width: any, height: any): void;
+    /**
+     * Replaces the current drawing canvas with a temporary scratch canvas and
+     * suspends the main context. Drawing operations on the scratch canvas are
+     * composited back via `compose()`. The scratch canvas mirrors many operations
+     * onto the suspended canvas to keep their graphics-state stacks in sync, so
+     * that clipping paths and transformations remain correct when soft mask mode
+     * ends.
      */
     beginSMaskMode(opIdx: any): void;
     smaskScratchCanvas: any;
     endSMaskMode(): void;
     compose(dirtyBox: any): void;
     composeSMask(ctx: any, smask: any, layerCtx: any, layerBox: any): void;
-    genericComposeSMask(maskCtx: any, layerCtx: any, width: any, height: any, subtype: any, backdrop: any, transferMap: any, layerOffsetX: any, layerOffsetY: any, maskOffsetX: any, maskOffsetY: any): void;
+    genericComposeSMask(maskCtx: any, layerCtx: any, width: any, height: any, layerOffsetX: any, layerOffsetY: any, maskOffsetX: any, maskOffsetY: any): void;
     save(opIdx: any): void;
     restore(opIdx: any): void;
     transform(opIdx: any, a: any, b: any, c: any, d: any, e: any, f: any): void;
@@ -191,6 +205,7 @@ declare class CanvasExtraState {
     textRise: number;
     fillColor: string;
     strokeColor: string;
+    tilingPatternDims: null;
     patternFill: boolean;
     patternStroke: boolean;
     fillAlpha: number;

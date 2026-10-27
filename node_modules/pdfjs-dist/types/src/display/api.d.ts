@@ -122,12 +122,6 @@ export type DocumentInitParameters = {
      */
     maxImageSize?: number | undefined;
     /**
-     * - Determines if we can evaluate strings
-     * as JavaScript. Primarily used to improve performance of PDF functions.
-     * The default value is `true`.
-     */
-    isEvalSupported?: boolean | undefined;
-    /**
      * - Determines if we can use
      * `OffscreenCanvas` in the worker. Primarily used to improve performance of
      * image conversion/rendering.
@@ -662,9 +656,6 @@ export const build: string;
  * @property {number} [maxImageSize] - The maximum allowed image size in total
  *   pixels, i.e. width * height. Images above this value will not be rendered.
  *   Use -1 for no limit, which is also the default value.
- * @property {boolean} [isEvalSupported] - Determines if we can evaluate strings
- *   as JavaScript. Primarily used to improve performance of PDF functions.
- *   The default value is `true`.
  * @property {boolean} [isOffscreenCanvasSupported] - Determines if we can use
  *   `OffscreenCanvas` in the worker. Primarily used to improve performance of
  *   image conversion/rendering.
@@ -765,18 +756,6 @@ export class PDFDataRangeTransport {
     progressiveDone: boolean;
     contentDispositionFilename: string;
     /**
-     * @param {function} listener
-     */
-    addRangeListener(listener: Function): void;
-    /**
-     * @param {function} listener
-     */
-    addProgressiveReadListener(listener: Function): void;
-    /**
-     * @param {function} listener
-     */
-    addProgressiveDoneListener(listener: Function): void;
-    /**
      * @param {number} begin
      * @param {Uint8Array|null} chunk
      */
@@ -786,7 +765,7 @@ export class PDFDataRangeTransport {
      */
     onDataProgressiveRead(chunk: Uint8Array | null): void;
     onDataProgressiveDone(): void;
-    transportReady(): void;
+    transportReady(listener: any): void;
     /**
      * @param {number} begin
      * @param {number} end
@@ -1086,10 +1065,11 @@ export class PDFDocumentProxy {
      */
     getData(): Promise<Uint8Array>;
     /**
-     * @returns {Promise<Uint8Array>} A promise that is resolved with a
-     *   {Uint8Array} containing the full data of the saved document.
+     * @returns {Promise<Uint8Array<ArrayBuffer>>} A promise that is
+     *   resolved with a {Uint8Array<ArrayBuffer>} containing the
+     *   full data of the saved document.
      */
-    saveDocument(): Promise<Uint8Array>;
+    saveDocument(): Promise<Uint8Array<ArrayBuffer>>;
     /**
      * @typedef {Object} PageInfo
      * @property {null|Uint8Array} document
@@ -1097,6 +1077,26 @@ export class PDFDocumentProxy {
      *  included ranges or indices.
      * @property {Array<Array<number>|number>} [excludePages]
      *  excluded ranges or indices.
+     * @property {Array<number>} [pageIndices] Explicit 0-based positions in the
+     *  final document for pages contributed by this entry. If shorter than the
+     *  filtered page list, the remaining pages are placed in the first free
+     *  slots at extraction time. Positions must not overlap with those of
+     *  other entries, and the union of all explicit/auto-filled positions
+     *  across the call must form a dense `[0, N)` range (where `N` is the
+     *  total page count of the final document) — sparse layouts leave empty
+     *  slots and are not supported. Cannot be combined with `insertAfter` on
+     *  the same entry, and must fully cover the filtered page list when any
+     *  entry in the same call specifies `insertAfter` (partial arrays are
+     *  rejected in that case).
+     * @property {number} [insertAfter] 0-based index in the base sequential
+     *  sequence (the concatenation of entries that have neither `pageIndices`
+     *  nor `insertAfter`) after which to insert the pages. When every
+     *  contributing entry carries explicit `pageIndices`, this is interpreted
+     *  against that explicit layout instead, shifting any existing positions
+     *  beyond the insertion point to make room. Use `-1` to insert before
+     *  everything. Values beyond the current layout are clamped so the pages
+     *  are appended at the end. Cannot be combined with `pageIndices` on the
+     *  same entry.
      */
     /**
      * @param {Array<PageInfo>} pageInfos - The pages to extract.
@@ -1113,6 +1113,32 @@ export class PDFDocumentProxy {
          * excluded ranges or indices.
          */
         excludePages?: (number | number[])[] | undefined;
+        /**
+         * Explicit 0-based positions in the
+         * final document for pages contributed by this entry. If shorter than the
+         * filtered page list, the remaining pages are placed in the first free
+         * slots at extraction time. Positions must not overlap with those of
+         * other entries, and the union of all explicit/auto-filled positions
+         * across the call must form a dense `[0, N)` range (where `N` is the
+         * total page count of the final document) — sparse layouts leave empty
+         * slots and are not supported. Cannot be combined with `insertAfter` on
+         * the same entry, and must fully cover the filtered page list when any
+         * entry in the same call specifies `insertAfter` (partial arrays are
+         * rejected in that case).
+         */
+        pageIndices?: number[] | undefined;
+        /**
+         * 0-based index in the base sequential
+         * sequence (the concatenation of entries that have neither `pageIndices`
+         * nor `insertAfter`) after which to insert the pages. When every
+         * contributing entry carries explicit `pageIndices`, this is interpreted
+         * against that explicit layout instead, shifting any existing positions
+         * beyond the insertion point to make room. Use `-1` to insert before
+         * everything. Values beyond the current layout are clamped so the pages
+         * are appended at the end. Cannot be combined with `pageIndices` on the
+         * same entry.
+         */
+        insertAfter?: number | undefined;
     }>): Promise<Uint8Array>;
     /**
      * @returns {Promise<{ length: number }>} A promise that is resolved when the

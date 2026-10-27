@@ -100,10 +100,10 @@ export class AnnotationLayer {
         linkService: any;
         annotationStorage: any;
     });
+    zIndex: number;
     div: any;
     page: any;
     viewport: any;
-    zIndex: number;
     _annotationEditorUIManager: any;
     _commentManager: any;
     popupShow: any[] | undefined;
