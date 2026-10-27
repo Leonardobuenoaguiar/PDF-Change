@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Logo } from "./components/Logo";
 import Studio from "./components/Studio";
+import * as E from "./lib/engine";
 
 const steps = [
   { n: "01", t: "Envie", d: "Arraste seus arquivos ou escolha do seu dispositivo." },
@@ -129,8 +130,97 @@ function ToolsTicker() {
   );
 }
 
+type QuickTool = "docx" | "jpg" | "compress";
+
 function Hero() {
-  const [file, setFile] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [tool, setTool] = useState<QuickTool>("docx");
+  const [dragging, setDragging] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [zipping, setZipping] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
+  const [outputs, setOutputs] = useState<E.OutFile[]>([]);
+  const [error, setError] = useState("");
+  const busy = processing || zipping;
+
+  function chooseFile(next: File) {
+    if (busy) return;
+    setOutputs([]);
+    setProgress(0);
+    setProgressLabel("");
+    setError("");
+    if (next.type !== "application/pdf" && !next.name.toLowerCase().endsWith(".pdf")) {
+      setFile(null);
+      setError("Selecione um arquivo PDF para usar estas ferramentas.");
+      return;
+    }
+    if (next.size > 100 * 1024 * 1024) {
+      setFile(null);
+      setError("O arquivo deve ter no máximo 100 MB.");
+      return;
+    }
+    setFile(next);
+  }
+
+  function chooseTool(next: QuickTool) {
+    if (busy || next === tool) return;
+    setTool(next);
+    setOutputs([]);
+    setProgress(0);
+    setProgressLabel("");
+    setError("");
+  }
+
+  async function convertNow() {
+    if (busy) return;
+    if (!file) {
+      setError("Selecione um arquivo PDF antes de continuar.");
+      return;
+    }
+
+    setProcessing(true);
+    setOutputs([]);
+    setError("");
+    setProgress(0);
+    setProgressLabel("Preparando arquivo...");
+    try {
+      const onProgress: E.Progress = (pct, label) => {
+        setProgress(Number.isFinite(pct) ? Math.max(0, Math.min(99, Math.round(pct))) : 0);
+        setProgressLabel(label || "Processando arquivo...");
+      };
+      const result = tool === "compress"
+        ? await E.compressPdf(file, 0.8, 1.3, onProgress)
+        : await E.convertFile(file, tool, onProgress);
+      if (!result.length) throw new Error("A conversão não gerou nenhum arquivo.");
+      setOutputs(result);
+      setProgress(100);
+      setProgressLabel("");
+    } catch (err: unknown) {
+      setProgressLabel("");
+      setError(err instanceof Error && err.message ? err.message : "Não foi possível processar o arquivo. Tente novamente.");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  async function downloadResults() {
+    if (!outputs.length || busy) return;
+    setError("");
+    try {
+      if (outputs.length === 1) {
+        E.download(outputs[0]);
+      } else {
+        setZipping(true);
+        E.download(await E.zipFiles(outputs));
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error && err.message ? err.message : "Não foi possível baixar o resultado. Tente novamente.");
+    } finally {
+      setZipping(false);
+    }
+  }
+
   return (
     <section className="relative overflow-hidden">
       <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-brand/20 blur-3xl" />
@@ -163,20 +253,77 @@ function Hero() {
               <p className="text-sm font-semibold text-ink">Converter arquivo</p>
               <span className="rounded-md bg-ink px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Beta</span>
             </div>
-            <label className="mt-4 flex h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand/40 bg-brand-soft/60 text-center transition hover:border-brand">
-              <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0]?.name ?? null)} />
+            <label
+              className={`mt-4 flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-brand-soft/60 p-4 text-center transition focus-within:ring-2 focus-within:ring-brand/50 ${dragging ? "border-brand" : "border-brand/40"} ${busy ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-brand"}`}
+              onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                const dropped = e.dataTransfer.files[0];
+                if (dropped && !busy) chooseFile(dropped);
+              }}
+            >
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                className="sr-only"
+                disabled={busy}
+                aria-label="Selecionar arquivo PDF"
+                onChange={(e) => {
+                  const selected = e.currentTarget.files?.[0];
+                  if (selected) chooseFile(selected);
+                  e.currentTarget.value = "";
+                }}
+              />
               <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand text-white">
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
               </div>
-              <p className="text-sm font-medium text-ink">{file ?? "Arraste seu PDF aqui"}</p>
-              <p className="text-xs text-ink/50">PDF, DOCX, JPG · até 100 MB</p>
+              <p className="max-w-full truncate text-sm font-medium text-ink">{file?.name ?? "Arraste seu PDF aqui"}</p>
+              <p className="text-xs text-ink/50">PDF · até 100 MB</p>
             </label>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {["PDF → Word", "PDF → JPG", "Comprimir"].map((x) => (
-                <a key={x} href="#conversoes" className="rounded-lg border border-black/10 py-2 text-center text-xs font-medium text-ink/70 transition hover:border-brand hover:bg-brand-soft hover:text-brand-dark">{x}</a>
+            <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="Escolha a ferramenta">
+              {([
+                { id: "docx", label: "PDF → Word" },
+                { id: "jpg", label: "PDF → JPG" },
+                { id: "compress", label: "Comprimir" },
+              ] as const).map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => chooseTool(option.id)}
+                  disabled={busy}
+                  aria-pressed={tool === option.id}
+                  className={`rounded-lg border py-2 text-center text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${tool === option.id ? "border-brand bg-brand-soft text-brand-dark" : "border-black/10 text-ink/70 hover:border-brand hover:bg-brand-soft hover:text-brand-dark"}`}
+                >
+                  {option.label}
+                </button>
               ))}
             </div>
-            <a href="#conversoes" className="mt-3 block w-full rounded-xl bg-ink py-3 text-center text-sm font-semibold text-white transition hover:bg-brand">Converter agora</a>
+            <button type="button" onClick={convertNow} disabled={busy} className="mt-3 block w-full rounded-xl bg-ink py-3 text-center text-sm font-semibold text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:opacity-50">
+              {processing ? "Processando..." : "Converter agora"}
+            </button>
+            {processing && (
+              <div className="mt-4" role="status" aria-live="polite">
+                <div className="flex justify-between gap-2 text-xs text-ink/60">
+                  <span>{progressLabel || "Processando arquivo..."}</span>
+                  <span>{progress}%</span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-brand-soft" role="progressbar" aria-label="Progresso da conversão" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+                  <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            )}
+            {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
+            {outputs.length > 0 && (
+              <div className="mt-4 rounded-xl bg-brand-soft/60 p-4" role="status" aria-live="polite">
+                <p className="text-sm font-semibold text-ink">Arquivo processado com sucesso.</p>
+                <p className="mt-1 truncate text-xs text-ink/60">{outputs.length === 1 ? outputs[0].name : `${outputs.length} arquivos prontos para baixar`}</p>
+                <button type="button" onClick={downloadResults} disabled={busy} className="mt-3 w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
+                  {zipping ? "Preparando ZIP..." : outputs.length === 1 ? "Baixar arquivo" : `Baixar ${outputs.length} arquivos em ZIP`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
