@@ -214,7 +214,7 @@ function Hero({ file, onFileChange }: HeroProps) {
           <div className="mt-8 flex flex-wrap items-center gap-6 text-sm text-ink/50">
             <span className="inline-flex items-center gap-1.5">
               <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 7.5 7 10 4-2.5 7-5.5 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
-              Arquivos apagados em 1h
+              Sem armazenamento em servidor.
             </span>
             <span className="inline-flex items-center gap-1.5">
               <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l3 2M9 2h6M12 5V2" /></svg>
