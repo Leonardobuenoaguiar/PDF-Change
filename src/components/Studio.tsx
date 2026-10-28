@@ -415,7 +415,7 @@ type StudioProps = {
 };
 
 export default function Studio({ selectedFile = null, onClearSelectedFile, onBeforeRun }: StudioProps = {}) {
-  const [cat, setCat] = useState<Cat>("conv");
+  const [cat, setCat] = useState<Cat>("pdf");
   const [open, setOpen] = useState<Tool | null>(null);
   const [q, setQ] = useState("");
   const [hist, setHist] = useState<Hist[]>(() => {

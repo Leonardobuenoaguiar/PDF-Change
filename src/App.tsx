@@ -59,7 +59,6 @@ function ToolsTicker() {
     "Comprimir arquivos",
     "Juntar PDFs",
     "Dividir PDFs",
-    "Assinar documentos",
   ];
 
   return (
@@ -312,7 +311,7 @@ function Donation() {
         <div>
           <p className="text-sm font-bold uppercase tracking-widest text-brand">Apoie o autor</p>
           <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-tight text-ink">
-            Gratuito para todos. Feito com carinho.
+            Gratuito para todos. Seu apoio ajuda este projeto a continuar.
           </h2>
           <p className="mt-4 max-w-lg text-ink/60">
             O PDF Change é gratuito. Se ele ajuda você no dia a dia, considere apoiar o autor com uma doação via Pix. Toda ajuda faz a diferença.
@@ -427,6 +426,7 @@ function Footer() {
             <p className="mt-3 text-sm leading-6 text-white/65">
               O PDF Change é gratuito. Sua contribuição via Pix ajuda a manter o projeto.
             </p>
+
             <a href="#doar" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-brand hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
               Apoiar com Pix
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
