@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CATEGORIES, TOOLS, byCat, type Cat, type Tool } from "../lib/catalog";
 import * as E from "../lib/engine";
 
@@ -15,6 +15,88 @@ type Job = {
 type Hist = { tool: string; file: string; out: string; when: string; ok: boolean };
 
 const uid = () => Math.random().toString(36).slice(2);
+
+
+type IconName = "file" | "convert" | "image" | "table" | "slides" | "split" | "merge" | "rotate" | "compress" | "scan" | "info" | "search" | "sparkle" | "edit" | "archive" | "tools" | "clock" | "check" | "alert" | "download" | "close" | "arrow";
+
+const iconDrawings: Record<IconName, ReactNode> = {
+  file: <><path d="M6 2.75h8l4.5 4.5V21H6z" /><path d="M14 2.75v5h4.5M9 12h6M9 16h6" /></>,
+  convert: <><path d="M4 7h13l-3-3m3 3-3 3M20 17H7l3 3m-3-3 3-3" /></>,
+  image: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></>,
+  table: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M4 9h16M4 15h16M10 9v12M15 9v12" /></>,
+  slides: <><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M8 21h8M12 18v3M7 14l3-3 3 2 4-5" /></>,
+  split: <><circle cx="6" cy="6" r="2" /><circle cx="6" cy="18" r="2" /><path d="M8 7l11 10M8 17 19 7" /></>,
+  merge: <><rect x="3" y="3" width="11" height="13" rx="1.5" /><path d="M8 19h11a2 2 0 0 0 2-2V8M12 10h8m-3-3 3 3-3 3" /></>,
+  rotate: <><path d="M20 7v5h-5" /><path d="M20 12a8 8 0 1 1-2.3-5.65L20 8" /></>,
+  compress: <><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" /><path d="m4 4 5 5m11-5-5 5M4 20l5-5m11 5-5-5" /></>,
+  scan: <><path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3M4 16v3a1 1 0 0 0 1 1h3m8 0h3a1 1 0 0 0 1-1v-3M7 9h10M7 12h10M7 15h7" /></>,
+  info: <><circle cx="12" cy="12" r="9" /><path d="M12 10.5v5M12 7.5h.01" /></>,
+  search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></>,
+  sparkle: <><path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3ZM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14ZM5 15l.7 1.8L7.5 17.5l-1.8.7L5 20l-.7-1.8-1.8-.7 1.8-.7L5 15Z" /></>,
+  edit: <><path d="m4 16 10.5-10.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4ZM13 7l4 4" /></>,
+  archive: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M3 5h18v4H3zM10 13h4" /></>,
+  tools: <><path d="M14.5 5.5a4.3 4.3 0 0 0-5.5 5.5L4 16a2 2 0 0 0 3 3l5-5a4.3 4.3 0 0 0 5.5-5.5L15 11l-2-2 2.5-3.5Z" /></>,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  check: <><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></>,
+  alert: <><path d="M12 3 2.7 19h18.6L12 3Z" /><path d="M12 9v4m0 3h.01" /></>,
+  download: <><path d="M12 3v12m-4-4 4 4 4-4" /><path d="M4 17v3h16v-3" /></>,
+  close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+  arrow: <><path d="M4 12h16m-5-5 5 5-5 5" /></>,
+};
+
+function SvgIcon({ name, className = "h-4 w-4" }: { name: IconName; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {iconDrawings[name]}
+    </svg>
+  );
+}
+
+function categoryIcon(id: string, name: string): IconName {
+  const value = `${id} ${name}`.toLowerCase();
+  if (/(^|[\s_-])(ia|ai)(?=$|[\s_-])|intelig/.test(value)) return "sparkle";
+  if (/conv|convers/.test(value)) return "convert";
+  if (/img|imag|foto/.test(value)) return "image";
+  if (/ocr|texto|text/.test(value)) return "scan";
+  if (/pdf|edit|organ/.test(value)) return "file";
+  if (/util|ferrament|tool/.test(value)) return "tools";
+  return "file";
+}
+
+function toolIcon(tool: Tool): IconName {
+  if (tool.kind === "convert" && tool.target) {
+    const target = tool.target.toLowerCase();
+    if (/^(jpg|jpeg|png|webp|gif|bmp|tiff?)$/.test(target)) return "image";
+    if (/^(xls|xlsx|csv)$/.test(target)) return "table";
+    if (/^(ppt|pptx)$/.test(target)) return "slides";
+    if (/^(pdf|doc|docx|odt|rtf|txt|html)$/.test(target)) return "file";
+  }
+  const byKind: Record<string, IconName> = {
+    convert: "convert", split: "split", rotate: "rotate", compress: "compress",
+    image: "image", img2pdf: "image", merge: "merge", zip: "archive",
+    "ocr-text": "scan", "ocr-pdf": "scan", info: "info", detect: "search",
+    analyze: "sparkle", rename: "edit",
+  };
+  return byKind[tool.kind] || categoryIcon(String(tool.cat), "");
+}
+
+function acceptsFile(file: File, accepted: string): boolean {
+  const rules = (accepted || "").trim().toLowerCase();
+  if (!rules || rules === "*" || rules === "*/*" || rules === "*.*") return true;
+  const name = file.name.toLowerCase();
+  const mime = file.type.toLowerCase() || (name.endsWith(".pdf") ? "application/pdf" : "");
+  return rules.split(",").some((part) => {
+    const rule = part.trim();
+    if (!rule) return false;
+    if (rule === "*" || rule === "*/*" || rule === "*.*") return true;
+    if (rule.startsWith("*.")) return name.endsWith(rule.slice(1));
+    if (rule.startsWith(".")) return name.endsWith(rule);
+    if (rule.endsWith("/*")) return mime.startsWith(rule.slice(0, -1));
+    if (rule === "application/pdf" && name.endsWith(".pdf")) return true;
+    if (rule.includes("/")) return mime === rule;
+    return name.endsWith(`.${rule}`);
+  });
+}
 
 /* ---------------- Dropzone ---------------- */
 function Drop({ tool, onFiles }: { tool: Tool; onFiles: (f: File[]) => void }) {
@@ -48,8 +130,17 @@ function Drop({ tool, onFiles }: { tool: Tool; onFiles: (f: File[]) => void }) {
 }
 
 /* ---------------- Workspace ---------------- */
-function Workspace({ tool, onClose, pushHist }: { tool: Tool; onClose: () => void; pushHist: (h: Hist) => void }) {
-  const [jobs, setJobs] = useState<Job[]>([]);
+function Workspace({ tool, onClose, pushHist, initialFile = null, rejectedFile = null, onBeforeRun }: {
+  tool: Tool;
+  onClose: () => void;
+  pushHist: (h: Hist) => void;
+  initialFile?: File | null;
+  rejectedFile?: File | null;
+  onBeforeRun?: () => void;
+}) {
+  const [jobs, setJobs] = useState<Job[]>(() => initialFile
+    ? [{ id: uid(), file: initialFile, status: "fila", pct: 0, label: "", outs: [] }]
+    : []);
   const [running, setRunning] = useState(false);
   const [report, setReport] = useState<string>("");
   const [opts, setOpts] = useState({
@@ -132,6 +223,7 @@ function Workspace({ tool, onClose, pushHist }: { tool: Tool; onClose: () => voi
 
   const run = async () => {
     if (!jobs.length || running) return;
+    onBeforeRun?.();
     setRunning(true);
     setReport("");
     const pending = jobs.filter((j) => j.status !== "ok");
@@ -187,10 +279,22 @@ function Workspace({ tool, onClose, pushHist }: { tool: Tool; onClose: () => voi
             <h3 className="mt-1 text-2xl font-semibold text-ink">{tool.label}</h3>
             <p className="mt-1 text-sm text-ink/55">{tool.desc}</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 text-ink/40 hover:bg-brand-soft hover:text-brand">✕</button>
+          <button onClick={onClose} aria-label="Fechar ferramenta" className="rounded-lg p-2 text-ink/40 hover:bg-brand-soft hover:text-brand"><SvgIcon name="close" className="h-5 w-5" /></button>
         </div>
 
         <div className="space-y-5 p-6">
+          {initialFile && jobs.some((job) => job.file === initialFile && job.status === "fila") && (
+            <p className="flex items-start gap-2 rounded-xl bg-brand-soft px-4 py-3 text-sm text-ink/70" role="status">
+              <SvgIcon name="file" className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+              <span>O arquivo <strong className="break-all text-ink">{initialFile.name}</strong> já está na fila. Ajuste as opções e clique em Executar.</span>
+            </p>
+          )}
+          {rejectedFile && jobs.length === 0 && (
+            <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+              <SvgIcon name="alert" className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>O arquivo <strong className="break-all">{rejectedFile.name}</strong> não é compatível com esta ferramenta. Escolha um arquivo aceito abaixo.</span>
+            </p>
+          )}
           <Drop tool={tool} onFiles={addFiles} />
 
           {/* opções */}
@@ -260,8 +364,8 @@ function Workspace({ tool, onClose, pushHist }: { tool: Tool; onClose: () => voi
                   {j.outs.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {j.outs.map((o) => (
-                        <button key={o.name} onClick={() => E.download(o)} className="rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand">
-                          ⬇ {o.name} ({E.fmtSize(o.blob.size)})
+                        <button key={o.name} onClick={() => E.download(o)} className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand">
+                          <SvgIcon name="download" className="h-3.5 w-3.5 shrink-0" /> {o.name} ({E.fmtSize(o.blob.size)})
                         </button>
                       ))}
                     </div>
@@ -304,7 +408,13 @@ function Workspace({ tool, onClose, pushHist }: { tool: Tool; onClose: () => voi
 }
 
 /* ---------------- Seção pública ---------------- */
-export default function Studio() {
+type StudioProps = {
+  selectedFile?: File | null;
+  onClearSelectedFile?: () => void;
+  onBeforeRun?: () => void;
+};
+
+export default function Studio({ selectedFile = null, onClearSelectedFile, onBeforeRun }: StudioProps = {}) {
   const [cat, setCat] = useState<Cat>("conv");
   const [open, setOpen] = useState<Tool | null>(null);
   const [q, setQ] = useState("");
@@ -329,6 +439,8 @@ export default function Studio() {
     return [...m.entries()];
   }, [list]);
 
+  const selectedFileFits = Boolean(open && selectedFile && acceptsFile(selectedFile, open.accept));
+
   return (
     <section id="conversoes" className="scroll-mt-20 bg-white py-24">
       <div className="mx-auto max-w-6xl px-5">
@@ -348,6 +460,22 @@ export default function Studio() {
           />
         </div>
 
+        {selectedFile && (
+          <div className="mt-8 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-brand/20 bg-brand-soft/50 px-4 py-3" role="status">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-brand"><SvgIcon name="file" className="h-5 w-5" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink">Arquivo selecionado:</p>
+              <p className="mt-0.5 break-all text-sm font-medium text-ink">{selectedFile.name}</p>
+              <p className="mt-1 text-xs text-ink/60">Escolha uma ferramenta para usar este arquivo.</p>
+            </div>
+            {onClearSelectedFile && (
+              <div className="w-full pl-[52px] sm:w-auto sm:pl-0">
+                <button type="button" onClick={onClearSelectedFile} className="rounded-lg text-sm font-semibold text-brand hover:underline sm:px-3 sm:py-2">Remover arquivo</button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-8 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => (
             <button
@@ -355,7 +483,7 @@ export default function Studio() {
               onClick={() => { setCat(c.id); setQ(""); }}
               className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${cat === c.id && !q ? "bg-ink text-white" : "bg-brand-soft text-ink/70 hover:text-brand-dark"}`}
             >
-              <span className="mr-1.5">{c.icon}</span>{c.name}
+              <SvgIcon name={categoryIcon(String(c.id), c.name)} className="mr-1.5 inline-block h-4 w-4 align-[-0.15em]" />{c.name}
               <span className="ml-2 text-xs opacity-50">{byCat(c.id).length}</span>
             </button>
           ))}
@@ -373,11 +501,11 @@ export default function Studio() {
                   className="group rounded-2xl border border-black/5 bg-white p-5 text-left transition hover:-translate-y-1 hover:border-brand/40 hover:shadow-xl hover:shadow-brand/10"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand-soft text-brand">{CATEGORIES.find((c) => c.id === t.cat)?.icon}</span>
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand"><SvgIcon name={toolIcon(t)} className="h-5 w-5" /></span>
                     <span className="font-semibold text-ink">{t.label}</span>
                   </div>
                   <p className="mt-3 text-sm text-ink/55">{t.desc}</p>
-                  <span className="mt-4 inline-block text-sm font-semibold text-brand opacity-0 transition group-hover:opacity-100">Abrir →</span>
+                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand opacity-0 transition group-hover:opacity-100">Abrir <SvgIcon name="arrow" className="h-4 w-4" /></span>
                 </button>
               ))}
             </div>
@@ -387,7 +515,7 @@ export default function Studio() {
         {/* histórico */}
         <div className="mt-14 rounded-3xl border border-black/5 bg-brand-soft/50 p-6">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-ink">🕑 Histórico de conversões</h3>
+            <h3 className="flex items-center gap-2 font-semibold text-ink"><SvgIcon name="clock" className="h-5 w-5 text-brand" /> Histórico de conversões</h3>
             {hist.length > 0 && <button onClick={() => setHist([])} className="text-sm font-semibold text-brand hover:underline">Limpar</button>}
           </div>
           {hist.length === 0 ? (
@@ -401,7 +529,12 @@ export default function Studio() {
                 <tbody className="text-ink/70">
                   {hist.slice(0, 8).map((h, i) => (
                     <tr key={i} className="border-t border-black/5">
-                      <td className="py-2 font-medium text-ink">{h.ok ? "✅" : "⚠️"} {h.tool}</td>
+                      <td className="py-2 font-medium text-ink">
+                        <span className="inline-flex items-center gap-2">
+                          <SvgIcon name={h.ok ? "check" : "alert"} className={`h-4 w-4 shrink-0 ${h.ok ? "text-brand" : "text-red-500"}`} />
+                          <span className="sr-only">{h.ok ? "Concluído:" : "Erro:"}</span>{h.tool}
+                        </span>
+                      </td>
                       <td className="max-w-[12rem] truncate py-2">{h.file}</td>
                       <td className="max-w-[14rem] truncate py-2">{h.out}</td>
                       <td className="py-2 whitespace-nowrap">{h.when}</td>
@@ -414,7 +547,17 @@ export default function Studio() {
         </div>
       </div>
 
-      {open && <Workspace tool={open} onClose={() => setOpen(null)} pushHist={pushHist} />}
+      {open && (
+        <Workspace
+          key={open.id}
+          tool={open}
+          onClose={() => setOpen(null)}
+          pushHist={pushHist}
+          initialFile={selectedFileFits ? selectedFile : null}
+          rejectedFile={selectedFile && !selectedFileFits ? selectedFile : null}
+          onBeforeRun={onBeforeRun}
+        />
+      )}
     </section>
   );
 }

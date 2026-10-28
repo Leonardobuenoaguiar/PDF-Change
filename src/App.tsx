@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Logo } from "./components/Logo";
 import Studio from "./components/Studio";
-import * as E from "./lib/engine";
 
 const steps = [
   { n: "01", t: "Envie", d: "Arraste seus arquivos ou escolha do seu dispositivo." },
@@ -130,95 +129,68 @@ function ToolsTicker() {
   );
 }
 
-type QuickTool = "docx" | "jpg" | "compress";
+// Alguns navegadores não implementam a iteração assíncrona de ReadableStream
+// usada pelo PDF.js. Só adiciona a compatibilidade quando ela está ausente.
+function ensureReadableStreamAsyncIterator() {
+  if (typeof ReadableStream === "undefined" || typeof Symbol === "undefined" || typeof Symbol.asyncIterator !== "symbol") return;
+  const prototype = ReadableStream.prototype as any;
+  if (typeof prototype[Symbol.asyncIterator] === "function") return;
 
-function Hero() {
-  const [file, setFile] = useState<File | null>(null);
-  const [tool, setTool] = useState<QuickTool>("docx");
+  const iterator = typeof prototype.values === "function"
+    ? prototype.values
+    : async function* (this: ReadableStream<unknown>) {
+        const reader = this.getReader();
+        let completed = false;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              completed = true;
+              break;
+            }
+            yield value;
+          }
+        } finally {
+          if (!completed) {
+            try { await reader.cancel(); } catch { /* mantém o erro original, se houver */ }
+          }
+          reader.releaseLock();
+        }
+      };
+
+  try {
+    Object.defineProperty(prototype, Symbol.asyncIterator, {
+      configurable: true,
+      writable: true,
+      value: iterator,
+    });
+  } catch {
+    // Se o protótipo estiver bloqueado, o motor exibirá o erro de conversão.
+  }
+}
+
+type HeroProps = {
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+};
+
+function Hero({ file, onFileChange }: HeroProps) {
   const [dragging, setDragging] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [zipping, setZipping] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState("");
-  const [outputs, setOutputs] = useState<E.OutFile[]>([]);
   const [error, setError] = useState("");
-  const busy = processing || zipping;
 
   function chooseFile(next: File) {
-    if (busy) return;
-    setOutputs([]);
-    setProgress(0);
-    setProgressLabel("");
     setError("");
     if (next.type !== "application/pdf" && !next.name.toLowerCase().endsWith(".pdf")) {
-      setFile(null);
-      setError("Selecione um arquivo PDF para usar estas ferramentas.");
+      onFileChange(null);
+      setError("Selecione um arquivo PDF para continuar.");
       return;
     }
     if (next.size > 100 * 1024 * 1024) {
-      setFile(null);
+      onFileChange(null);
       setError("O arquivo deve ter no máximo 100 MB.");
       return;
     }
-    setFile(next);
-  }
-
-  function chooseTool(next: QuickTool) {
-    if (busy || next === tool) return;
-    setTool(next);
-    setOutputs([]);
-    setProgress(0);
-    setProgressLabel("");
-    setError("");
-  }
-
-  async function convertNow() {
-    if (busy) return;
-    if (!file) {
-      setError("Selecione um arquivo PDF antes de continuar.");
-      return;
-    }
-
-    setProcessing(true);
-    setOutputs([]);
-    setError("");
-    setProgress(0);
-    setProgressLabel("Preparando arquivo...");
-    try {
-      const onProgress: E.Progress = (pct, label) => {
-        setProgress(Number.isFinite(pct) ? Math.max(0, Math.min(99, Math.round(pct))) : 0);
-        setProgressLabel(label || "Processando arquivo...");
-      };
-      const result = tool === "compress"
-        ? await E.compressPdf(file, 0.8, 1.3, onProgress)
-        : await E.convertFile(file, tool, onProgress);
-      if (!result.length) throw new Error("A conversão não gerou nenhum arquivo.");
-      setOutputs(result);
-      setProgress(100);
-      setProgressLabel("");
-    } catch (err: unknown) {
-      setProgressLabel("");
-      setError(err instanceof Error && err.message ? err.message : "Não foi possível processar o arquivo. Tente novamente.");
-    } finally {
-      setProcessing(false);
-    }
-  }
-
-  async function downloadResults() {
-    if (!outputs.length || busy) return;
-    setError("");
-    try {
-      if (outputs.length === 1) {
-        E.download(outputs[0]);
-      } else {
-        setZipping(true);
-        E.download(await E.zipFiles(outputs));
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error && err.message ? err.message : "Não foi possível baixar o resultado. Tente novamente.");
-    } finally {
-      setZipping(false);
-    }
+    onFileChange(next);
   }
 
   return (
@@ -240,9 +212,15 @@ function Hero() {
               Ver como funciona
             </a>
           </div>
-          <div className="mt-8 flex items-center gap-6 text-sm text-ink/50">
-            <span>🔒 Arquivos apagados em 1h</span>
-            <span>⚡ Média de 3s por arquivo</span>
+          <div className="mt-8 flex flex-wrap items-center gap-6 text-sm text-ink/50">
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 7.5 7 10 4-2.5 7-5.5 7-10V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+              Arquivos apagados em 1h
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l3 2M9 2h6M12 5V2" /></svg>
+              Média de 3s por arquivo
+            </span>
           </div>
         </div>
 
@@ -254,21 +232,20 @@ function Hero() {
               <span className="rounded-md bg-ink px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Beta</span>
             </div>
             <label
-              className={`mt-4 flex h-44 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-brand-soft/60 p-4 text-center transition focus-within:ring-2 focus-within:ring-brand/50 ${dragging ? "border-brand" : "border-brand/40"} ${busy ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:border-brand"}`}
-              onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }}
+              className={`mt-4 flex h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed bg-brand-soft/60 p-4 text-center transition focus-within:ring-2 focus-within:ring-brand/50 hover:border-brand ${dragging ? "border-brand" : "border-brand/40"}`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => {
                 e.preventDefault();
                 setDragging(false);
                 const dropped = e.dataTransfer.files[0];
-                if (dropped && !busy) chooseFile(dropped);
+                if (dropped) chooseFile(dropped);
               }}
             >
               <input
                 type="file"
                 accept=".pdf,application/pdf"
                 className="sr-only"
-                disabled={busy}
                 aria-label="Selecionar arquivo PDF"
                 onChange={(e) => {
                   const selected = e.currentTarget.files?.[0];
@@ -277,53 +254,17 @@ function Hero() {
                 }}
               />
               <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand text-white">
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
               </div>
               <p className="max-w-full truncate text-sm font-medium text-ink">{file?.name ?? "Arraste seu PDF aqui"}</p>
-              <p className="text-xs text-ink/50">PDF · até 100 MB</p>
+              <p className="text-xs text-ink/50">{file ? "Toque ou clique para trocar o arquivo" : "PDF · até 100 MB"}</p>
             </label>
-            <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="Escolha a ferramenta">
-              {([
-                { id: "docx", label: "PDF → Word" },
-                { id: "jpg", label: "PDF → JPG" },
-                { id: "compress", label: "Comprimir" },
-              ] as const).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => chooseTool(option.id)}
-                  disabled={busy}
-                  aria-pressed={tool === option.id}
-                  className={`rounded-lg border py-2 text-center text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${tool === option.id ? "border-brand bg-brand-soft text-brand-dark" : "border-black/10 text-ink/70 hover:border-brand hover:bg-brand-soft hover:text-brand-dark"}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <button type="button" onClick={convertNow} disabled={busy} className="mt-3 block w-full rounded-xl bg-ink py-3 text-center text-sm font-semibold text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:opacity-50">
-              {processing ? "Processando..." : "Converter agora"}
-            </button>
-            {processing && (
-              <div className="mt-4" role="status" aria-live="polite">
-                <div className="flex justify-between gap-2 text-xs text-ink/60">
-                  <span>{progressLabel || "Processando arquivo..."}</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-brand-soft" role="progressbar" aria-label="Progresso da conversão" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-                  <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-            )}
             {error && <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>}
-            {outputs.length > 0 && (
-              <div className="mt-4 rounded-xl bg-brand-soft/60 p-4" role="status" aria-live="polite">
-                <p className="text-sm font-semibold text-ink">Arquivo processado com sucesso.</p>
-                <p className="mt-1 truncate text-xs text-ink/60">{outputs.length === 1 ? outputs[0].name : `${outputs.length} arquivos prontos para baixar`}</p>
-                <button type="button" onClick={downloadResults} disabled={busy} className="mt-3 w-full rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50">
-                  {zipping ? "Preparando ZIP..." : outputs.length === 1 ? "Baixar arquivo" : `Baixar ${outputs.length} arquivos em ZIP`}
-                </button>
-              </div>
-            )}
+            <a href="#conversoes" className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-3 text-center text-sm font-semibold text-white transition hover:bg-brand">
+              Escolher tipo de conversão
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
+            </a>
+            {file && <p className="mt-3 text-center text-xs text-ink/55">Seu PDF será adicionado às ferramentas compatíveis.</p>}
           </div>
         </div>
       </div>
@@ -428,17 +369,74 @@ function CTA() {
 }
 
 function Footer() {
+  const recursos = [
+    "Converter PDF para Word e JPG",
+    "Juntar e dividir arquivos PDF",
+    "Comprimir e organizar documentos",
+  ];
+
   return (
-    <footer className="border-t border-black/5">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:flex-row sm:items-center sm:justify-between">
-        <Logo />
-        <div className="flex flex-wrap gap-6 text-sm text-ink/55">
-          <a href="#conversoes" className="hover:text-brand">Ferramentas</a>
-          <a href="#doar" className="hover:text-brand">Doar</a>
+    <footer className="relative overflow-hidden bg-ink text-white">
+      <style>{`
+        .pdf-change-footer-logo,
+        .pdf-change-footer-logo > * {
+          background: transparent !important;
+        }
+        .pdf-change-footer-logo,
+        .pdf-change-footer-logo * {
+          color: #fff !important;
+        }
+      `}</style>
+      <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-brand/20 blur-3xl" aria-hidden="true" />
+
+      <div className="relative mx-auto max-w-6xl px-5 pt-16 sm:pt-20">
+        <div className="grid gap-10 border-b border-white/10 pb-14 sm:grid-cols-2 lg:grid-cols-[1.45fr_0.8fr_1.1fr_1.15fr] lg:gap-12">
+          <div>
+            <div className="pdf-change-footer-logo inline-block"><Logo /></div>
+            <p className="mt-5 max-w-xs text-sm leading-7 text-white/65">
+              Ferramentas gratuitas para converter, organizar e transformar seus PDFs direto no navegador.
+            </p>
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/75">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-brand" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></svg>
+              Gratuito e sem cadastro
+            </div>
+          </div>
+
+          <nav aria-label="Navegação no rodapé">
+            <h2 className="text-sm font-semibold text-white">Navegação</h2>
+            <ul className="mt-5 space-y-3 text-sm text-white/65">
+              <li><a href="#conversoes" className="transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Ferramentas</a></li>
+              <li><a href="#como" className="transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Como funciona</a></li>
+              <li><a href="#doar" className="transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Doar</a></li>
+            </ul>
+          </nav>
+
+          <section aria-labelledby="footer-recursos">
+            <h2 id="footer-recursos" className="text-sm font-semibold text-white">Recursos populares</h2>
+            <ul className="mt-5 space-y-3 text-sm leading-6 text-white/65">
+              {recursos.map((recurso) => <li key={recurso}>{recurso}</li>)}
+            </ul>
+            <a href="#conversoes" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-white transition hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
+              Ver todas as ferramentas
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
+            </a>
+          </section>
+
+          <section aria-labelledby="footer-apoio" className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <h2 id="footer-apoio" className="text-sm font-semibold text-white">Apoie o projeto</h2>
+            <p className="mt-3 text-sm leading-6 text-white/65">
+              O PDF Change é gratuito. Sua contribuição via Pix ajuda a manter o projeto.
+            </p>
+            <a href="#doar" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:bg-brand hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
+              Apoiar com Pix
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
+            </a>
+          </section>
         </div>
-        <div className="text-sm sm:text-right">
-          <p className="text-ink/40">© 2026 PDF Change</p>
-          <p className="mt-1 text-ink/60">Desenvolvido por Leonardo Bueno de Aguiar</p>
+
+        <div className="flex flex-col gap-2 py-7 text-sm text-white/55 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <p>© {new Date().getFullYear()} PDF Change</p>
+          <p>Desenvolvido por <span className="font-medium text-white/80">Leonardo Bueno de Aguiar</span></p>
         </div>
       </div>
     </footer>
@@ -446,7 +444,10 @@ function Footer() {
 }
 
 export default function App() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   useEffect(() => {
+    ensureReadableStreamAsyncIterator();
     // Substitui eventuais favicons antigos, incluindo o padrão do projeto.
     const previousIcons = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]'));
     previousIcons.forEach((icon) => icon.remove());
@@ -472,8 +473,8 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white font-sans antialiased">
       <Nav />
-      <Hero />
-      <Studio />
+      <Hero file={selectedFile} onFileChange={setSelectedFile} />
+      <Studio selectedFile={selectedFile} onClearSelectedFile={() => setSelectedFile(null)} onBeforeRun={ensureReadableStreamAsyncIterator} />
       <How />
       <Donation />
       <CTA />
