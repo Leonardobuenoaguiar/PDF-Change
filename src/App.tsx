@@ -294,7 +294,7 @@ function How() {
 
 function Donation() {
   // Chave Pix de telefone no formato internacional.
-  const pixKey = "+5551998661062";
+  const pixKey = "291b3543-2252-463b-bbda-0e91564f0263";
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
 
   async function copyPixKey() {
@@ -318,7 +318,7 @@ function Donation() {
             O PDF Change é gratuito. Se ele ajuda você no dia a dia, considere apoiar o autor com uma doação via Pix. Toda ajuda faz a diferença.
           </p>
           <div className="mt-8 max-w-lg rounded-2xl border border-black/5 bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">Chave Pix (telefone)</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">Chave Pix (aleatória)</p>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <code className="select-all break-all text-lg font-semibold text-ink">{pixKey}</code>
               <button type="button" onClick={copyPixKey} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark">
